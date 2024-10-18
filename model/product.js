@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const db = require("../config");
+const db = require("../db");
 
 const productSchema = db.dbConn.define("Product", {
   productName: {
@@ -7,13 +7,14 @@ const productSchema = db.dbConn.define("Product", {
     allowNull: false,
   },
   productPrice: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING,
     allowNull: false,
   },
   userId: {
     type: DataTypes.INTEGER,
+    allowNull: false,
   },
-  filename: {
+  fileName: {
     type: DataTypes.STRING,
     allowNull: false,
   },

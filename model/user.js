@@ -1,17 +1,16 @@
 const { DataTypes } = require("sequelize");
-const db = require("../config");
+const db = require("../db");
 
 const userSchema = db.dbConn.define(
   "User",
   {
-    Name: {
+    name: {
       type: DataTypes.STRING,
       allowNull: false,
     },
     email: {
       type: DataTypes.STRING,
       allowNull: false,
-      isEmail: true,
       unique: true,
     },
     password: {
@@ -22,9 +21,15 @@ const userSchema = db.dbConn.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    isVerify: {
+      type: DataTypes.TINYINT,
+    },
     token: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    auth: {
+      type: DataTypes.STRING,
     },
   },
   { tableName: "user" }

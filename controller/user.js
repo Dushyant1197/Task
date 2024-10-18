@@ -2,54 +2,64 @@
 const { User, Product } = require("../model");
 const comparePass = require("bcrypt");
 const jwtToken = require("jsonwebtoken");
-const express = require("express");
-const multer = require("multer");
-const path = require("path");
 const bcryp = require("../middleware/bcrypt");
 const jwt = require("../middleware/jsonWebToken");
+const sendMailer = require("../middleware/nodeMailer");
 
-const userSingup = async (req, res) => {
+const verifyByEmail = async (req, res) => {
   try {
-    let bodyData = req.body;
-    let { Name, email, password, role, productName, productPrice, id } =
-      req.body;
+    const updateInfo = await User.update(
+      { isVerify: 1 },
+      { where: { id: req.params.id } }
+    );
+    res.render("verified");
+    // console.log("INFO : ", updateInfo);
+  } catch (error) {
+    console.log("error : ", error);
+  }
+};
+const userSignUp = async (req, res) => {
+  try {
+    let { name, email, password, role, productName, productPrice } = req.body;
     let token = "";
 
-    // File Upload
-    // const storage = multer.diskStorage({
-    //   destination: (req, file, cb) => {
-    //     cb(null, "uploads/"); // Specify the uploads directory
-    //   },
-    //   filename: (req, file, cb) => {
-    //     cb(null, file.originalname); // Use original file name
-    //   },
-    // });
+    const getEmail = await User.findOne({ where: { email: email } });
+    if (getEmail) {
+      return res.json({ Error: "User Already Exist" });
+    }
 
-    // const upload = multer({ storage });
-    // console.log(upload.getFilename.filename);
-    // file upload end
+    const hashPassword = bcryp.bcryptPass(password);
+    password = await hashPassword;
 
-    // const getEmail = await User.findOne({ where: { email: email } });
-    // if (getEmail) {
-    //   return res.json({ Error: "User Already Exist" });
-    // }
-    // const hashPassword = bcryp.bcryptPass(password);
-    // password = await hashPassword;
+    const getToken = await jwt.jsonWebToken(email, "", role);
+    token = getToken;
+    // console.log("----- Body:", req.body);
+    // console.log("----- Files:", req.files);
 
-    // const getToken = await jwt.jsonWebToken(email);
-    // token = getToken;
-    // console.log(getToken);
+    console.log("data : --==> ");
+    const data = await User.create({ name, email, password, role, token });
+    console.log("data : --==> ", name, email, data.dataValues.id);
+    if (data) {
+      console.log("Sending confirmation email...");
+      await sendMailer.sendConfirmationMail(name, email, data.dataValues.id);
+      console.log("Confirmation email sent.");
+    }
 
-    // const data = await User.create({ Name, email, password, role, token });
+    // const imagePaths = req.files.images.map((file) => file.path);
+    // const OriginalName = req.files.images.map((file) => file.originalname);
+
     // const productData = await Product.create({
     //   productName,
     //   productPrice,
     //   userId: data.id,
+    //   fileName: JSON.stringify(OriginalName),
+    //   path: JSON.stringify(imagePaths),
     // });
-    // res.status(200).json({ data, productData });
+
+    res.status(200).json({ data: data });
   } catch (error) {
     console.log(error);
-    res.json({ Error: "Internal Server Error" });
+    res.json({ message: error });
   }
 };
 
@@ -57,15 +67,21 @@ const loginUser = async (req, res) => {
   try {
     let userData = req.body;
     const getUser = await User.findOne({ where: { email: userData.email } });
+    console.log("----- ID ----- ", getUser.role);
+
     let password = "";
 
     if (getUser) {
       password = await comparePass.compare(userData.password, getUser.password);
       if (password) {
-        const getToken = await jwt.jsonWebToken(getUser.email, getUser.id);
-        const updatedToken = { token: getToken };
+        const getToken = await jwt.jsonWebToken(
+          getUser.email,
+          getUser.dataValues.id,
+          getUser.role
+        );
+        const updatedData = { token: getToken, role: getUser.role };
 
-        const data = await User.update(updatedToken, {
+        const data = await User.update(updatedData, {
           where: {
             email: getUser.email,
           },
@@ -84,15 +100,15 @@ const loginUser = async (req, res) => {
 
 const updateUser = async (req, res) => {
   try {
-    const userData = req.body; //get data from body
     const id = req.params.id;
     if (id) {
       const updatedData = User.update(userData, {
         where: { id: id },
       });
-      res.status(200).send(userData);
+      res.status(200).json({ Success: "Update Successfully!" });
+    } else {
+      res.json({ error: "You are not authorized" });
     }
-    res.json({ Error: "User Not Found" });
   } catch (error) {
     console.log(error);
     res.status(501).json({ Error: "Internal Server error" });
@@ -104,25 +120,27 @@ const deleteUser = async (req, res) => {
     const id = req.params.id;
     if (id) {
       await User.destroy({ where: { id: id } });
+      res.status(200).json({ Success: "Deleted Successfully!" });
+    } else {
+      res.status(400).json({ error: "You are not Authorized" });
     }
-    res.status(200).json({ Success: "Deleted Successfully!" });
   } catch (error) {
+    console.log(error);
     res.status(501).json({ Error: "Internal Server error" });
   }
 };
 
 const getUser = async (req, res) => {
   try {
-    // let getToken = req.headers["authorization"].split(" ")[1];
-    // getToken = jwtToken.decode(getToken);
-    // console.log(getToken.id);
     const id = req.params.id;
     if (id) {
       const userData = await User.findOne({ where: { id: id } });
-      res.status(200).send(userData);
+      res.status(200).json({ data: userData });
+    } else {
+      res.json({ Error: "User Not Found" });
     }
-    res.json({ Error: "User Not Found" });
   } catch (error) {
+    console.log(error);
     res.status(501).json({ Error: "Internal Server error" });
   }
 };
@@ -130,17 +148,56 @@ const getUser = async (req, res) => {
 const getAllUser = async (req, res) => {
   try {
     const data = await User.findAll({});
+    // console.log("-----TokeN-----=>", token);
     res.status(200).send(data);
   } catch (error) {
+    console.log(error);
     res.status(501).json({ Error: "Internal Server error" });
   }
 };
 
+const getUsersWithProducts = async (req, res) => {
+  try {
+    const users = await User.findAll({
+      include: {
+        model: Product,
+        required: true, // Ensures only users with Product are returned
+      },
+    });
+    res.status(200).json(users);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ Error: "Internal Server error" });
+  }
+};
+
+const getUserWithProduct = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const user = await User.findOne({
+      include: {
+        model: Product,
+        required: true, // Ensures only users with Product are returned
+      },
+      where: {
+        id: id,
+      },
+    });
+    res.status(200).json(user);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ Error: "Internal Server error" });
+  }
+};
+
 module.exports = {
-  userSingup,
+  userSignUp,
   loginUser,
   updateUser,
   deleteUser,
   getUser,
   getAllUser,
+  getUsersWithProducts,
+  getUserWithProduct,
+  verifyByEmail,
 };
